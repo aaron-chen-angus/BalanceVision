@@ -371,4 +371,5 @@ BalanceVision is intended for educational, wellness, fitness, community care, an
 
 ## 20. License
 
-MIT
+Republic Polytechnic
+Team NotLepak (S3729C)
