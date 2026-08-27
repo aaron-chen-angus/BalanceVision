@@ -805,4 +805,4 @@ See §16 and §14.
 
 ## License
 
-MIT
+Health Promotion Innovation Laboratory, Republic Polytechnic
