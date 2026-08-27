@@ -805,4 +805,4 @@ See §16 and §14.
 
 ## License
 
-Health Promotion Innovation Laboratory, Republic Polytechnic
+Republic Polytechnic Health Promotion Innovation Laboratory
