@@ -6,7 +6,11 @@ BalanceVision is a browser-based, computer-vision-assisted screening and perform
 
 > **BalanceVision is a computer-vision-assisted screening / performance-assessment application. It is not a clinical diagnostic device.** All outputs are estimates derived from 2D camera landmarks and should be interpreted as part of a broader assessment, never as a standalone diagnosis or fall-risk prediction.
 
-> **Quick access** — Application: https://aaron-chen-angus.github.io/BalanceVision/ · R Shiny Dashboard: https://intellicare.shinyapps.io/BalanceVision/ · Repository: https://github.com/aaron-chen-angus/BalanceVision · Live Results Sheet: https://docs.google.com/spreadsheets/d/1Ly_4NAyrZkuKwGuYUwez3qEGAnNIMqvMMrOOABXbgLE/ (full details in §2).
+> **Quick access** 
+· Application: https://aaron-chen-angus.github.io/BalanceVision/ 
+· R Shiny Dashboard: https://intellicare.shinyapps.io/BalanceVision/ 
+· Repository: https://github.com/aaron-chen-angus/BalanceVision 
+· Live Results Sheet: https://docs.google.com/spreadsheets/d/1Ly_4NAyrZkuKwGuYUwez3qEGAnNIMqvMMrOOABXbgLE/ (full details in §2).
 
 ---
 
