@@ -146,16 +146,188 @@ clean_data <- function(df) {
 
 fmt <- function(v, d = 2) ifelse(is.na(v), "-", formatC(v, format = "f", digits = d))
 
+# ---- Message helper ----------------------------------------------------------
+# Some shiny/htmltools version combinations throw
+#   "is.character(txt) is not TRUE"
+# from inside validate()/need()'s message-coercion path. To be robust across
+# package versions we avoid validate(need()) entirely and instead stop() with a
+# plain-string message that renders as a clean notice via the wrappers below.
+stop_msg <- function(msg) stop(structure(
+  class = c("bvNotice", "error", "condition"),
+  list(message = as.character(msg)[1], call = NULL)))
+
+# Render a friendly notice (grey italic) for a caught bvNotice / any error.
+notice_html <- function(msg)
+  HTML(paste0("<em style='color:#78909c'>", htmltools::htmlEscape(as.character(msg)), "</em>"))
+
+# A blank placeholder plot carrying a centred grey message (used when data is absent).
+notice_plot <- function(msg) {
+  ggplot2::ggplot() +
+    ggplot2::annotate("text", x = 0, y = 0, label = as.character(msg),
+                      colour = "#78909c", size = 4.5) +
+    ggplot2::theme_void() +
+    ggplot2::theme(plot.background  = ggplot2::element_rect(fill = "#0a1628", colour = NA),
+                   panel.background = ggplot2::element_rect(fill = "#0a1628", colour = NA))
+}
+
+# Wrappers: run an expression; if a bvNotice/error is raised, show the message
+# as a clean notice instead of a red "Error:" banner. These replace validate().
+ui_guard <- function(expr) tryCatch(expr, error = function(e) notice_html(conditionMessage(e)))
+plot_guard <- function(expr) tryCatch(expr, error = function(e) notice_plot(conditionMessage(e)))
+dt_guard <- function(expr) tryCatch(expr, error = function(e)
+  DT::datatable(data.frame(Note = conditionMessage(e)), rownames = FALSE,
+                options = list(dom = "t")))
+
+# ---- BalanceVision plot theme (matches web-app aesthetic + font) -------------
+BV <- list(
+  bg      = "#0a1628",
+  surface = "#111d33",
+  card    = "#162440",
+  accent  = "#00e5ff",
+  text    = "#ffffff",
+  text2   = "#b0bec5",
+  muted   = "#78909c",
+  gridcol = "#243a5e",   # subtle cyan-tinted grid line
+  success = "#4caf50",
+  warning = "#ffab40",
+  danger  = "#ef5350"
+)
+
+# Cyan-forward discrete palette echoing the app's accent-led look
+BV_DISCRETE <- c("#00e5ff", "#4caf50", "#ffab40", "#ef5350",
+                 "#7c9cff", "#b388ff", "#26c6da", "#ffd54f")
+
+# Discrete + gradient scales that mirror the app colours
+scale_bv_d <- function(...) ggplot2::scale_colour_manual(values = BV_DISCRETE, na.value = "grey60", ...)
+scale_bv_fill_d <- function(...) ggplot2::scale_fill_manual(values = BV_DISCRETE, na.value = "grey60", ...)
+
+theme_bv <- function(base_size = 13) {
+  ggplot2::theme_minimal(base_size = base_size) +
+    ggplot2::theme(
+      plot.background   = ggplot2::element_rect(fill = BV$bg,   colour = NA),
+      panel.background  = ggplot2::element_rect(fill = BV$card, colour = NA),
+      panel.grid.major  = ggplot2::element_line(colour = BV$gridcol, linewidth = 0.3),
+      panel.grid.minor  = ggplot2::element_blank(),
+      text              = ggplot2::element_text(colour = BV$text2),
+      plot.title        = ggplot2::element_text(colour = BV$accent, face = "bold"),
+      axis.title        = ggplot2::element_text(colour = BV$text2),
+      axis.text         = ggplot2::element_text(colour = BV$text2),
+      legend.background = ggplot2::element_rect(fill = BV$bg, colour = NA),
+      legend.key        = ggplot2::element_rect(fill = BV$card, colour = NA),
+      legend.text       = ggplot2::element_text(colour = BV$text2),
+      legend.title      = ggplot2::element_text(colour = BV$text2)
+    )
+}
+
 # ==============================================================================
 # UI
 # ==============================================================================
 ui <- fluidPage(
-  theme = shinytheme("flatly"),
+  theme = shinytheme("cyborg"),
   tags$head(tags$style(HTML("
-    .kpi{background:#f4f6f8;border-radius:6px;padding:10px 12px;text-align:center;}
-    .kpi .v{font-size:22px;font-weight:700;color:#2C3E50;}
-    .kpi .l{font-size:12px;color:#657;}
-    .small-note{font-size:12px;color:#777;}
+    /* ── BalanceVision app theme (matches web app aesthetic + font) ──────── */
+    :root{
+      --bv-bg:#0a1628; --bv-surface:#111d33; --bv-card:#162440;
+      --bv-card-hover:#1c2d50; --bv-accent:#00e5ff;
+      --bv-text:#ffffff; --bv-text-2:#b0bec5; --bv-text-muted:#78909c;
+      --bv-border:rgba(0,229,255,0.2);
+      --bv-success:#4caf50; --bv-warning:#ffab40; --bv-danger:#ef5350;
+    }
+    html, body, .container-fluid{
+      background:var(--bv-bg) !important;
+      color:var(--bv-text);
+      font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    }
+    body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+
+    h1,h2,h3,h4,h5{ color:var(--bv-text); font-weight:600; }
+    .shiny-html-output h4, h4{ color:var(--bv-accent); }
+    p, label, .control-label{ color:var(--bv-text-2); }
+    a{ color:var(--bv-accent); }
+    hr{ border-top:1px solid var(--bv-border); }
+
+    /* Title */
+    h2.title, .title{ color:var(--bv-accent); font-weight:700; letter-spacing:-0.5px; }
+
+    /* Panels / cards */
+    .well, .tab-content, .shiny-input-container{ color:var(--bv-text-2); }
+    .well{
+      background:var(--bv-surface) !important;
+      border:1px solid var(--bv-border) !important;
+      border-radius:12px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.3);
+    }
+    .sidebarPanel, .col-sm-3 .well{ background:var(--bv-surface) !important; }
+
+    /* KPI tiles */
+    .kpi{
+      background:var(--bv-card); border:1px solid var(--bv-border);
+      border-radius:12px; padding:14px 12px; text-align:center;
+      box-shadow:0 4px 24px rgba(0,0,0,0.3);
+    }
+    .kpi .v{ font-size:26px; font-weight:700; color:var(--bv-accent); }
+    .kpi .l{ font-size:12px; color:var(--bv-text-muted); text-transform:uppercase; letter-spacing:1px; }
+    .small-note{ font-size:12px; color:var(--bv-text-muted); }
+
+    /* Tabs */
+    .nav-tabs{ border-bottom:1px solid var(--bv-border); }
+    .nav-tabs > li > a{
+      color:var(--bv-text-2); border:none; background:transparent;
+      border-radius:8px 8px 0 0;
+    }
+    .nav-tabs > li > a:hover{ background:var(--bv-card); color:var(--bv-accent); border-color:transparent; }
+    .nav-tabs > li.active > a,
+    .nav-tabs > li.active > a:hover,
+    .nav-tabs > li.active > a:focus{
+      background:var(--bv-card); color:var(--bv-accent);
+      border:1px solid var(--bv-border); border-bottom-color:var(--bv-card);
+    }
+
+    /* Inputs */
+    .form-control, .selectize-input, .selectize-dropdown{
+      background:var(--bv-card) !important; color:var(--bv-text) !important;
+      border:1px solid var(--bv-border) !important; border-radius:8px;
+    }
+    .form-control:focus, .selectize-input.focus{
+      border-color:var(--bv-accent) !important;
+      box-shadow:0 0 0 2px var(--bv-accent) !important;
+    }
+    .selectize-dropdown .active{ background:var(--bv-accent) !important; color:var(--bv-bg) !important; }
+    .irs-bar, .irs-bar-edge, .irs-single, .irs-from, .irs-to{
+      background:var(--bv-accent) !important; border-color:var(--bv-accent) !important; color:var(--bv-bg) !important;
+    }
+    .irs-line{ background:var(--bv-card) !important; }
+
+    /* Buttons */
+    .btn, .btn-default{
+      background:var(--bv-card); color:var(--bv-text);
+      border:1px solid var(--bv-border); border-radius:12px; font-weight:600;
+    }
+    .btn:hover, .btn-default:hover{ background:var(--bv-card-hover); border-color:var(--bv-accent); color:var(--bv-text); }
+    .btn-primary{ background:var(--bv-accent) !important; color:var(--bv-bg) !important; border:none; font-weight:600; }
+    .btn-primary:hover{ background:#33ecff !important; color:var(--bv-bg) !important; box-shadow:0 4px 20px rgba(0,229,255,0.3); }
+
+    /* Checkboxes / radios accent */
+    input[type=checkbox], input[type=radio]{ accent-color:var(--bv-accent); }
+
+    /* DataTables (dark) */
+    .dataTables_wrapper{ color:var(--bv-text-2); }
+    table.dataTable{ color:var(--bv-text-2); }
+    table.dataTable thead th{ color:var(--bv-accent); border-bottom:1px solid var(--bv-border) !important; }
+    table.dataTable tbody td{ border-top:1px solid rgba(0,229,255,0.08) !important; }
+    table.dataTable.stripe tbody tr.odd,
+    table.dataTable.display tbody tr.odd{ background:rgba(255,255,255,0.02); }
+    table.dataTable tbody tr:hover{ background:var(--bv-card-hover) !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button{ color:var(--bv-text-2) !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current{
+      background:var(--bv-accent) !important; color:var(--bv-bg) !important; border-color:var(--bv-accent) !important;
+    }
+    .dataTables_filter input, .dataTables_length select{
+      background:var(--bv-card) !important; color:var(--bv-text) !important; border:1px solid var(--bv-border) !important;
+    }
+
+    /* Validation / shiny messages */
+    .shiny-output-error-validation{ color:var(--bv-warning); }
   "))),
 
   titlePanel("BalanceVision — Single-Leg Balance Analytics"),
@@ -343,64 +515,67 @@ server <- function(input, output, session) {
   # Global filters applied everywhere
   fdata <- reactive({
     df <- clean()
-    validate(need(!is.null(df) && nrow(df) > 0,
-                  "Could not load data from the Google Sheet. Check the internet connection and that the sheet is shared as 'Anyone with the link can view', then press Refresh."))
+    if (is.null(df) || nrow(df) == 0)
+      stop_msg("Could not load data from the Google Sheet. Check the internet connection and that the sheet is shared as 'Anyone with the link can view', then press Refresh.")
     if (!is.null(input$f_ptype)) df <- df[df$participantType %in% input$f_ptype, , drop = FALSE]
     if (!is.null(input$f_sex))   df <- df[df$sex %in% input$f_sex, , drop = FALSE]
     if (isTRUE(input$f_completed)) df <- df[df$completed %in% TRUE, , drop = FALSE]
     if (isTRUE(input$f_artefact))  df <- df[!df$artefact, , drop = FALSE]
-    validate(need(nrow(df) > 0, "No rows match the current filters."))
+    if (nrow(df) == 0) stop_msg("No rows match the current filters.")
     df
   })
 
   output$status <- renderUI({
     df <- clean()
     if (is.null(df) || nrow(df) == 0)
-      return(HTML("<span style='color:#c0392b'>No data loaded.</span>"))
+      return(HTML("<span style='color:#ef5350'>No data loaded.</span>"))
     HTML(paste0("Loaded <b>", nrow(df), "</b> records &middot; <b>",
                 length(unique(df$participantId)), "</b> participants &middot; last refresh ",
                 format(load_time(), "%H:%M:%S")))
   })
 
   # ----- TAB 1: Scatter -------------------------------------------------------
-  plot_title <- eventReactive(input$update_title, toTitleCase(input$plot_title),
-                              ignoreNULL = FALSE)
+  # Guard against NULL/empty input on startup: toTitleCase() errors on non-character.
+  plot_title <- eventReactive(input$update_title, {
+    txt <- input$plot_title
+    if (is.null(txt) || !nzchar(trimws(txt))) "" else toTitleCase(trimws(txt))
+  }, ignoreNULL = FALSE)
 
   scatter_df <- reactive({
     df <- fdata(); x <- input$sx; y <- input$sy
     df[!is.na(df[[x]]) & !is.na(df[[y]]), , drop = FALSE]
   })
 
-  output$scatter <- renderPlot({
+  output$scatter <- renderPlot({ plot_guard({
     d <- scatter_df(); x <- input$sx; y <- input$sy; z <- input$sz
-    validate(need(nrow(d) > 0, "No non-missing points for the chosen axes."))
+    if (nrow(d) == 0) stop_msg("No non-missing points for the chosen axes.")
     p <- ggplot(d, aes(x = .data[[x]], y = .data[[y]], colour = .data[[z]])) +
       geom_point(alpha = input$salpha, size = input$ssize) +
-      scale_colour_viridis_d(option = "D", end = 0.9, na.value = "grey70") +
+      scale_bv_d() +
       labs(x = pretty_lab(x), y = pretty_lab(y), colour = pretty_lab(z),
            title = if (isTRUE(nzchar(plot_title()))) plot_title() else NULL) +
-      theme_minimal(base_size = 13)
+      theme_bv(13)
 
     if (input$smooth == "lm")
       p <- p + geom_smooth(aes(group = 1), method = "lm", formula = y ~ x,
-                           se = TRUE, colour = "black", linewidth = 0.6)
+                           se = TRUE, colour = BV$text, fill = BV$muted, linewidth = 0.6)
     if (input$smooth == "loess")
       p <- p + geom_smooth(aes(group = 1), method = "loess", formula = y ~ x,
-                           se = TRUE, colour = "black", linewidth = 0.6)
+                           se = TRUE, colour = BV$text, fill = BV$muted, linewidth = 0.6)
 
     if (isTRUE(input$ageref) && x == "age" && y == "duration") {
       ref <- data.frame(age = c(28, 44, 54, 64, 74, 84),
                         ref = c(44.7, 41.9, 41.2, 32.1, 21.5, 9.4))
       p <- p +
         geom_step(data = ref, aes(x = age, y = ref), inherit.aes = FALSE,
-                  linetype = "dashed", colour = "#c0392b") +
+                  linetype = "dashed", colour = BV$warning) +
         geom_point(data = ref, aes(x = age, y = ref), inherit.aes = FALSE,
-                   colour = "#c0392b", shape = 4, size = 2.5)
+                   colour = BV$warning, shape = 4, size = 2.5)
     }
     p
-  })
+  }) })
 
-  output$hover_info <- renderUI({
+  output$hover_info <- renderUI({ ui_guard({
     hv <- input$scatter_hover; if (is.null(hv)) return(NULL)
     d <- scatter_df(); x <- input$sx; y <- input$sy; z <- input$sz
     if (nrow(d) == 0) return(NULL)
@@ -408,8 +583,10 @@ server <- function(input, output, session) {
     if (nrow(pt) == 0) return(NULL)
     style <- paste0(
       "position:absolute; z-index:200; pointer-events:none; ",
-      "background-color: rgba(255,255,255,0.93); border:1px solid #999; ",
-      "border-radius:4px; padding:5px 8px; font-size:12px; ",
+      "background-color: rgba(22,36,64,0.96); color:#b0bec5; ",
+      "border:1px solid rgba(0,229,255,0.5); ",
+      "border-radius:8px; padding:6px 9px; font-size:12px; ",
+      "box-shadow:0 4px 24px rgba(0,0,0,0.4); ",
       "left:", hv$coords_css$x + 12, "px; top:", hv$coords_css$y + 12, "px;")
     div(style = style, HTML(paste0(
       "<b>", htmltools::htmlEscape(as.character(pt$participantId)), "</b><br/>",
@@ -417,25 +594,25 @@ server <- function(input, output, session) {
       pretty_lab(y), ": ", signif(pt[[y]], 3), "<br/>",
       pretty_lab(z), ": ", htmltools::htmlEscape(as.character(pt[[z]]))
     )))
-  })
+  }) })
 
   selected_pts <- reactive({
     d <- scatter_df()
     brushedPoints(d, input$scatter_brush, xvar = input$sx, yvar = input$sy)
   })
 
-  output$sel_table <- DT::renderDataTable({
+  output$sel_table <- DT::renderDataTable({ dt_guard({
     sel <- selected_pts()
-    validate(need(nrow(sel) > 0,
-                  "Drag a rectangle over the plot to list the selected points here."))
+    if (nrow(sel) == 0)
+      stop_msg("Drag a rectangle over the plot to list the selected points here.")
     cols <- unique(c("participantId","age","sex","participantType","supportLeg",
                      "trialNumber","duration","stabilityScore", input$sx, input$sy))
     cols <- intersect(cols, names(sel))
     DT::datatable(sel[, cols, drop = FALSE], rownames = FALSE,
                   options = list(pageLength = 5, scrollX = TRUE, dom = "tip"))
-  })
+  }) })
 
-  output$sel_stats <- renderUI({
+  output$sel_stats <- renderUI({ ui_guard({
     sel <- selected_pts()
     if (nrow(sel) == 0) return(HTML("<em>No points selected.</em>"))
     x <- input$sx; y <- input$sy; xv <- sel[[x]]; yv <- sel[[y]]
@@ -459,9 +636,9 @@ server <- function(input, output, session) {
       "<tr><td>Min</td><td>",    fmt(dx[4]), "</td><td>", fmt(dy[4]), "</td></tr>",
       "<tr><td>Max</td><td>",    fmt(dx[5]), "</td><td>", fmt(dy[5]), "</td></tr>",
       "</table><br/>", corr))
-  })
+  }) })
 
-  output$fit_summary <- renderUI({
+  output$fit_summary <- renderUI({ ui_guard({
     if (input$smooth != "lm") return(NULL)
     d <- scatter_df(); x <- input$sx; y <- input$sy
     if (nrow(d) < 3 || sd(d[[x]], na.rm = TRUE) == 0) return(NULL)
@@ -472,36 +649,36 @@ server <- function(input, output, session) {
       " &nbsp;|&nbsp; R&sup2; = ", fmt(s$r.squared, 3),
       " &nbsp;|&nbsp; slope p = ", fmt(co[2,4], 4),
       " &nbsp;|&nbsp; n = ", nrow(d), "</div>"))
-  })
+  }) })
 
   # ----- TAB 2: Distributions -------------------------------------------------
-  output$kpi_n     <- renderText({ nrow(fdata()) })
-  output$kpi_part  <- renderText({ length(unique(fdata()$participantId)) })
-  output$kpi_dur   <- renderText({ fmt(mean(fdata()$duration, na.rm = TRUE), 1) })
-  output$kpi_score <- renderText({ fmt(mean(fdata()$stabilityScore, na.rm = TRUE), 1) })
+  output$kpi_n     <- renderText({ tryCatch(nrow(fdata()), error = function(e) "-") })
+  output$kpi_part  <- renderText({ tryCatch(length(unique(fdata()$participantId)), error = function(e) "-") })
+  output$kpi_dur   <- renderText({ tryCatch(fmt(mean(fdata()$duration, na.rm = TRUE), 1), error = function(e) "-") })
+  output$kpi_score <- renderText({ tryCatch(fmt(mean(fdata()$stabilityScore, na.rm = TRUE), 1), error = function(e) "-") })
 
-  output$hist <- renderPlot({
+  output$hist <- renderPlot({ plot_guard({
     df <- fdata(); v <- input$dvar
     d <- df[!is.na(df[[v]]), , drop = FALSE]
-    validate(need(nrow(d) > 0, "No data for this variable."))
+    if (nrow(d) == 0) stop_msg("No data for this variable.")
     p <- ggplot(d, aes(x = .data[[v]])) +
       geom_histogram(aes(y = after_stat(density)), bins = input$dbins,
-                     fill = "#3498db", colour = "white", alpha = 0.85) +
+                     fill = BV$accent, colour = BV$bg, alpha = 0.85) +
       labs(x = pretty_lab(v), y = "Density",
            title = paste("Distribution of", pretty_lab(v))) +
-      theme_minimal(base_size = 13) +
-      geom_vline(xintercept = mean(d[[v]]), colour = "#2c3e50", linetype = "dotted")
-    if (isTRUE(input$ddens)) p <- p + geom_density(colour = "#e74c3c", linewidth = 0.8)
+      theme_bv(13) +
+      geom_vline(xintercept = mean(d[[v]]), colour = BV$text, linetype = "dotted")
+    if (isTRUE(input$ddens)) p <- p + geom_density(colour = BV$warning, linewidth = 0.8)
     if (isTRUE(input$dnorm)) {
       m <- mean(d[[v]]); s <- sd(d[[v]])
       if (is.finite(s) && s > 0)
         p <- p + stat_function(fun = dnorm, args = list(mean = m, sd = s),
-                               colour = "black", linetype = "dashed")
+                               colour = BV$text2, linetype = "dashed")
     }
     p
-  })
+  }) })
 
-  output$dist_stats <- renderUI({
+  output$dist_stats <- renderUI({ ui_guard({
     df <- fdata(); v <- input$dvar; x <- df[[v]]; x <- x[!is.na(x)]
     if (length(x) < 1) return(HTML("<em>No data.</em>"))
     sk <- if (sd(x) > 0) mean((x - mean(x))^3) / sd(x)^3 else NA
@@ -519,7 +696,7 @@ server <- function(input, output, session) {
       "<td style='padding-left:24px;'>Shapiro-Wilk p</td><td>", fmt(sh, 4), "</td></tr>",
       "</table>",
       "<div class='small-note'>Shapiro-Wilk p &lt; 0.05 suggests non-normality &rarr; prefer rank-based tests.</div>"))
-  })
+  }) })
 
   # ----- TAB 3: Group Comparisons ---------------------------------------------
   group_df <- reactive({
@@ -527,26 +704,26 @@ server <- function(input, output, session) {
     df[!is.na(df[[y]]) & !is.na(df[[g]]), , drop = FALSE]
   })
 
-  output$box <- renderPlot({
+  output$box <- renderPlot({ plot_guard({
     d <- group_df(); g <- input$gcat; y <- input$gnum
-    validate(need(nrow(d) > 0, "No data for this combination."))
+    if (nrow(d) == 0) stop_msg("No data for this combination.")
     p <- ggplot(d, aes(x = .data[[g]], y = .data[[y]], fill = .data[[g]]))
     if (input$gtype == "Box")
       p <- p + geom_boxplot(alpha = 0.7, outlier.alpha = 0.5)
     else
       p <- p + geom_violin(alpha = 0.6, scale = "width") +
                geom_boxplot(width = 0.12, alpha = 0.85, outlier.shape = NA)
-    p + geom_jitter(width = 0.15, alpha = 0.35, size = 1.2) +
-      scale_fill_viridis_d(option = "D", end = 0.9, na.value = "grey70") +
+    p + geom_jitter(width = 0.15, alpha = 0.35, size = 1.2, colour = BV$text2) +
+      scale_bv_fill_d() +
       labs(x = pretty_lab(g), y = pretty_lab(y),
            title = paste(pretty_lab(y), "by", pretty_lab(g))) +
-      theme_minimal(base_size = 13) +
+      theme_bv(13) +
       theme(legend.position = "none")
-  })
+  }) })
 
-  output$group_stats <- DT::renderDataTable({
+  output$group_stats <- DT::renderDataTable({ dt_guard({
     d <- group_df(); g <- input$gcat; y <- input$gnum
-    validate(need(nrow(d) > 0, "No data."))
+    if (nrow(d) == 0) stop_msg("No data.")
     parts <- split(d[[y]], droplevels(factor(d[[g]])))
     agg <- do.call(rbind, lapply(names(parts), function(k) {
       v <- parts[[k]]; v <- v[!is.na(v)]
@@ -558,9 +735,9 @@ server <- function(input, output, session) {
     }))
     num <- sapply(agg, is.numeric); agg[num] <- lapply(agg[num], round, 2)
     DT::datatable(agg, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
-  })
+  }) })
 
-  output$group_test <- renderUI({
+  output$group_test <- renderUI({ ui_guard({
     d <- group_df(); g <- droplevels(factor(d[[input$gcat]])); yv <- d[[input$gnum]]
     if (nlevels(g) < 2) return(HTML("<em>Need &ge;2 groups.</em>"))
     aov_p <- tryCatch(summary(aov(yv ~ g))[[1]][["Pr(>F)"]][1], error = function(e) NA)
@@ -570,46 +747,49 @@ server <- function(input, output, session) {
       "Kruskal-Wallis p = <b>", fmt(kw_p, 4), "</b> (rank-based, no normality assumption)",
       "<div class='small-note'>With repeated participants, treat these as exploratory; ",
       "use mixed models for confirmatory work.</div>"))
-  })
+  }) })
 
   # ----- TAB 4: Correlations --------------------------------------------------
   cor_mat <- reactive({
     df <- fdata(); vars <- input$cvars
-    validate(need(length(vars) >= 2, "Select at least two metrics."))
+    if (length(vars) < 2) stop_msg("Select at least two metrics.")
     vars <- intersect(vars, names(df))
     cor(df[, vars, drop = FALSE], use = "pairwise.complete.obs", method = input$cmethod)
   })
 
-  output$corr <- renderPlot({
+  output$corr <- renderPlot({ plot_guard({
     m <- cor_mat()
     cm <- as.data.frame(as.table(m)); names(cm) <- c("V1", "V2", "r")
     ord <- rownames(m)
     cm$V1 <- factor(cm$V1, levels = ord); cm$V2 <- factor(cm$V2, levels = rev(ord))
     ggplot(cm, aes(V1, V2, fill = r)) +
-      geom_tile(colour = "white") +
-      geom_text(aes(label = formatC(r, format = "f", digits = 2)), size = 3) +
-      scale_fill_gradient2(low = "#b2182b", mid = "white", high = "#2166ac",
+      geom_tile(colour = BV$bg) +
+      geom_text(aes(label = formatC(r, format = "f", digits = 2)),
+                size = 3, colour = BV$text) +
+      scale_fill_gradient2(low = BV$danger, mid = BV$card, high = BV$accent,
                            midpoint = 0, limits = c(-1, 1)) +
       scale_x_discrete(labels = function(z) vapply(z, pretty_lab, character(1))) +
       scale_y_discrete(labels = function(z) vapply(z, pretty_lab, character(1))) +
-      labs(x = NULL, y = NULL, fill = paste0(toTitleCase(input$cmethod), " r"),
+      labs(x = NULL, y = NULL,
+           fill = paste0(toTitleCase(if (is.null(input$cmethod)) "spearman" else input$cmethod), " r"),
            title = "Correlation matrix (pairwise complete)") +
-      theme_minimal(base_size = 12) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  })
+      theme_bv(12) +
+      theme(panel.grid.major = element_blank(),
+            axis.text.x = element_text(angle = 45, hjust = 1))
+  }) })
 
-  output$corr_table <- DT::renderDataTable({
+  output$corr_table <- DT::renderDataTable({ dt_guard({
     m <- round(cor_mat(), 3)
     out <- data.frame(Metric = vapply(rownames(m), pretty_lab, character(1)), m,
                       check.names = FALSE, row.names = NULL)
     DT::datatable(out, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
-  })
+  }) })
 
   # ----- TAB 5: Left–Right Asymmetry ------------------------------------------
   asym <- reactive({
     df <- fdata()
     d <- df[!is.na(df$duration) & df$supportLeg %in% c("Left","Right"), , drop = FALSE]
-    validate(need(nrow(d) > 0, "No duration data available."))
+    if (nrow(d) == 0) stop_msg("No duration data available.")
     agg <- aggregate(duration ~ participantId + supportLeg, data = d, FUN = max)
     L <- agg[agg$supportLeg == "Left",  c("participantId","duration")]; names(L)[2] <- "Left"
     R <- agg[agg$supportLeg == "Right", c("participantId","duration")]; names(R)[2] <- "Right"
@@ -621,29 +801,29 @@ server <- function(input, output, session) {
     w
   })
 
-  output$asym_plot <- renderPlot({
+  output$asym_plot <- renderPlot({ plot_guard({
     w <- asym()
-    validate(need(nrow(w) > 0,
-                  "No participant has both a left and a right record after filtering."))
+    if (nrow(w) == 0)
+      stop_msg("No participant has both a left and a right record after filtering.")
     lim <- range(c(w$Left, w$Right), na.rm = TRUE)
     ggplot(w, aes(Left, Right)) +
-      geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey55") +
+      geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = BV$muted) +
       geom_point(aes(colour = AbsPct), size = 3, alpha = 0.85) +
-      scale_colour_gradient(low = "#2166ac", high = "#b2182b", name = "|asym| %") +
+      scale_colour_gradient(low = BV$accent, high = BV$danger, name = "|asym| %") +
       coord_equal(xlim = lim, ylim = lim) +
       labs(x = "Best left-support duration (s)",
            y = "Best right-support duration (s)",
            title = "Left vs right best single-leg duration") +
-      theme_minimal(base_size = 13)
-  })
+      theme_bv(13)
+  }) })
 
-  output$asym_table <- DT::renderDataTable({
+  output$asym_table <- DT::renderDataTable({ dt_guard({
     w <- asym()
-    validate(need(nrow(w) > 0, "No paired participants."))
+    if (nrow(w) == 0) stop_msg("No paired participants.")
     DT::datatable(w, rownames = FALSE, options = list(pageLength = 8, scrollX = TRUE))
-  })
+  }) })
 
-  output$asym_test <- renderUI({
+  output$asym_test <- renderUI({ ui_guard({
     w <- asym()
     if (nrow(w) < 2) return(HTML("<em>Need &ge;2 paired participants for a test.</em>"))
     wt <- tryCatch(wilcox.test(w$Left, w$Right, paired = TRUE), error = function(e) NULL)
@@ -656,13 +836,13 @@ server <- function(input, output, session) {
       "Paired t-test p = <b>", if (is.null(tt)) "-" else fmt(tt$p.value, 4), "</b>",
       "<div class='small-note'>Duration is capped at the chosen max, so ceiling effects ",
       "can mask true asymmetry; favour the rank-based test.</div>"))
-  })
+  }) })
 
   # ----- TAB 6: Data Explorer -------------------------------------------------
-  output$explorer <- DT::renderDataTable({
+  output$explorer <- DT::renderDataTable({ dt_guard({
     DT::datatable(fdata(), rownames = FALSE, filter = "top",
                   options = list(pageLength = 15, scrollX = TRUE))
-  })
+  }) })
 
   output$download <- downloadHandler(
     filename = function() paste0("balancevision_", Sys.Date(), ".csv"),

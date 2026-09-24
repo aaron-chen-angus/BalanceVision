@@ -6,7 +6,7 @@ BalanceVision is a browser-based, computer-vision-assisted screening and perform
 
 > **BalanceVision is a computer-vision-assisted screening / performance-assessment application. It is not a clinical diagnostic device.** All outputs are estimates derived from 2D camera landmarks and should be interpreted as part of a broader assessment, never as a standalone diagnosis or fall-risk prediction.
 
-> **Quick access** — Application: https://aaron-chen-angus.github.io/BalanceVision/ · Live Results Sheet: https://docs.google.com/spreadsheets/d/1Ly_4NAyrZkuKwGuYUwez3qEGAnNIMqvMMrOOABXbgLE/ (full details in §2).
+> **Quick access** — Application: https://aaron-chen-angus.github.io/BalanceVision/ · R Shiny Dashboard: https://intellicare.shinyapps.io/BalanceVision/ · Repository: https://github.com/aaron-chen-angus/BalanceVision · Live Results Sheet: https://docs.google.com/spreadsheets/d/1Ly_4NAyrZkuKwGuYUwez3qEGAnNIMqvMMrOOABXbgLE/ (full details in §2).
 
 ---
 
@@ -67,6 +67,14 @@ Every completed test is saved to browser `localStorage` under the key `balancevi
 
 **Application URL**
 https://aaron-chen-angus.github.io/BalanceVision/
+
+**R Shiny Analytics Dashboard**
+https://intellicare.shinyapps.io/BalanceVision/
+
+The hosted R Shiny dashboard reads the Live Results Google Sheet and provides the scatter explorer, distributions, group comparisons, correlations, left–right asymmetry, and data explorer views (see `BalanceVision_Dashboard.R`).
+
+**Source Repository (GitHub)**
+https://github.com/aaron-chen-angus/BalanceVision
 
 **Live Results Dataset (Google Sheet)**
 https://docs.google.com/spreadsheets/d/1Ly_4NAyrZkuKwGuYUwez3qEGAnNIMqvMMrOOABXbgLE/
@@ -805,4 +813,4 @@ See §16 and §14.
 
 ## License
 
-Republic Polytechnic Health Promotion Innovation Laboratory
+MIT
